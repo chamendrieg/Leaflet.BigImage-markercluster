@@ -24,14 +24,18 @@
         options: {
             position: 'topright',
             title: 'Get image',
-            printControlLabel: '⤵️',
+            printControlLabel: "\uD83D\uDCE5",
             printControlClasses: [],
             printControlTitle: 'Get image',
             _unicodeClass: 'bigimage-unicode-icon',
             maxScale: 10,
             minScale: 1,
             inputTitle: 'Choose scale:',
-            downloadTitle: 'Download'
+            downloadTitle: 'Download',
+            clusterLargeImgSrc: '',
+            clusterSmallImgSrc: '',
+            clusterMediumImgSrc: '',
+            circleIcons: []
         },
 
         onAdd: function (map) {
@@ -47,9 +51,8 @@
         },
 
         _click: function (e) {
-            this._container.classList.add('leaflet-control-layers-expanded');
-            this._containerParams.style.display = '';
-            this._controlPanel.classList.add('bigimage-unicode-icon-disable');
+            this._loader.style.display = 'block';
+            this._print();
         },
 
         _createControl: function (label, title, classesToAdd, fn, context) {
@@ -57,21 +60,7 @@
             this._container = document.createElement('div');
             this._container.id = 'print-container';
             this._container.classList.add('leaflet-bar');
-
-            this._containerParams = document.createElement('div');
-            this._containerParams.id = 'print-params';
-            this._containerParams.style.display = 'none';
-
-            this._createCloseButton();
-
-            let containerTitle = document.createElement('h6');
-            containerTitle.style.width = '100%';
-            containerTitle.innerHTML = this.options.inputTitle;
-            this._containerParams.appendChild(containerTitle);
-
-            this._createScaleInput();
-            this._createDownloadButton();
-            this._container.appendChild(this._containerParams);
+            this._container.classList.add('print-hover');
 
             this._createControlPanel(classesToAdd, context, label, title, fn);
 
@@ -79,54 +68,6 @@
             L.DomEvent.disableClickPropagation(this._container);
 
             return this._container;
-        },
-
-        _createDownloadButton: function () {
-            this._downloadBtn = document.createElement('div');
-            this._downloadBtn.classList.add('download-button');
-
-            this._downloadBtn = document.createElement('div');
-            this._downloadBtn.classList.add('download-button');
-            this._downloadBtn.innerHTML = this.options.downloadTitle;
-
-            this._downloadBtn.addEventListener('click', () => {
-                let scale_value = this._scaleInput.value;
-                if (!scale_value || scale_value < this.options.minScale || scale_value > this.options.maxScale) {
-                    this._scaleInput.value = this.options.minScale;
-                    return;
-                }
-
-                this._containerParams.classList.add('print-disabled');
-                this._loader.style.display = 'block';
-                this._print();
-            });
-            this._containerParams.appendChild(this._downloadBtn);
-        },
-
-        _createScaleInput: function () {
-            this._scaleInput = document.createElement('input');
-            this._scaleInput.style.width = '100%';
-            this._scaleInput.type = 'number';
-            this._scaleInput.value = this.options.minScale;
-            this._scaleInput.min = this.options.minScale;
-            this._scaleInput.max = this.options.maxScale;
-            this._scaleInput.id = 'scale';
-            this._containerParams.appendChild(this._scaleInput);
-
-        },
-
-        _createCloseButton: function () {
-            let span = document.createElement('div');
-            span.classList.add('close');
-            span.innerHTML = '&times;';
-
-            span.addEventListener('click', () => {
-                this._container.classList.remove('leaflet-control-layers-expanded');
-                this._containerParams.style.display = 'none';
-                this._controlPanel.classList.remove('bigimage-unicode-icon-disable');
-            });
-
-            this._containerParams.appendChild(span);
         },
 
         _createControlPanel: function (classesToAdd, context, label, title, fn) {
@@ -138,6 +79,7 @@
                 controlPanel.classList.add(c);
             });
             L.DomEvent.on(controlPanel, 'click', fn, context);
+
             this._container.appendChild(controlPanel);
             this._controlPanel = controlPanel;
 
@@ -163,11 +105,12 @@
                             new_resolve();
                         } else if (layer instanceof L.Path) {
                             self._getPathLayer(layer, new_resolve);
+                        } else if(layer instanceof L.MarkerClusterGroup){
+                            self._getMarkerClusterLayer(layer, new_resolve);
                         } else {
                             new_resolve();
                         }
                     } catch (e) {
-                        console.log(e);
                         new_resolve();
                     }
                 }));
@@ -241,15 +184,17 @@
             }
 
             if (!self._pointPositionIsNotCorrect(pixelPoint) && layer._icon.src) {
+                
                 let image = new Image();
                 image.crossOrigin = 'Anonymous';
                 image.src = layer._icon.src
+                var toolTip = layer._tooltip?._content;                ;
                 image.onload = function () {
-                    self.markers[layer._leaflet_id] = { img: image, x: pixelPoint.x, y: pixelPoint.y };
+                    self.markers[layer._leaflet_id] = { img: image, x: pixelPoint.x, y: pixelPoint.y, tooltip: toolTip};
                     resolve();
                 };
                 return;
-            } else if (!self._pointPositionIsNotCorrect(pixelPoint) && layer._icon.innerHTML && !layer._icon.src) {
+            } else if (!self._pointPositionIsNotCorrect(pixelPoint) && layer._icon.innerHTML && !layer._icon.src && !layer._childCount) {
                 let html = new Text(layer._icon.innerHTML);
                 self.markers[layer._leaflet_id] = { html: html, x: pixelPoint.x, y: pixelPoint.y };
                 resolve();
@@ -263,6 +208,16 @@
         },
 
         _getPathLayer: function (layer, resolve) {
+            let self = this;
+            if(layer._radius > 0){
+                self._getCircleMarker(layer, resolve);
+            }   
+            else{
+                self._getPath(layer, resolve);
+            }
+        },
+
+        _getPath: function(layer, resolve){
             let self = this;
 
             let correct = 0;
@@ -288,6 +243,97 @@
                 options: layer.options
             };
             resolve();
+        },
+         _getCircleMarker: function(layer, resolve){
+            let self = this;
+            let options = this.options;
+            let promiseArray = [];
+
+            if (self.markers[layer._leaflet_id]) {
+                resolve();
+                return;
+            }
+
+            let pixelPoint = self._map.project(layer._latlng);
+            pixelPoint = pixelPoint.subtract(new L.Point(self.bounds.min.x, self.bounds.min.y));
+
+            if (layer.options.icon && layer.options.icon.options && layer.options.icon.options.iconAnchor) {
+                pixelPoint.x -= layer.options.icon.options.iconAnchor[0];
+                pixelPoint.y -= layer.options.icon.options.iconAnchor[1];
+            }
+           
+
+            promiseArray.push(new Promise(resolve => {
+                self._getCircleImage(layer._leaflet_id, pixelPoint, layer.options.fillColor, options.circleIcons, resolve);
+            })); 
+            Promise.all(promiseArray).then(() => {
+                resolve();
+            });
+         },
+         _getCircleImage: function(leaflet_id, pixelPoint, color, circleIcons, resolve){
+            let self = this;
+            const imageUrl =  circleIcons.find(({name}) => name.toUpperCase() === color.toUpperCase());
+            let image = new Image();
+            image.crossOrigin = 'Anonymous';          
+            image.onload = function () {
+                self.markers[leaflet_id] = { img: image, x: pixelPoint.x - 13, y: pixelPoint.y - 13};
+                resolve();
+            };
+            image.onerror = function() {
+                resolve();
+            };
+            image.src = imageUrl ? imageUrl.path : circleIcons[0].path;
+         },
+
+        _getMarkerClusterLayer: function (layer, resolve) {
+            let self = this;
+            var visibleClusterMarkers = [];
+            let options = this.options;
+            let promiseArray = [];
+            layer.eachLayer(function (marker) {
+                parent = layer.getVisibleParent(marker);
+                if (parent && (typeof visibleClusterMarkers[parent._leaflet_id] == 'undefined')
+                        && parent.options.icon.options.iconUrl == undefined) {     
+                    var parentLeaftletPos = parent._icon._leaflet_pos;
+                    var childCount = parent._childCount;
+                    var imageSrc = '';
+                    if(childCount < 10){ // small
+                        imageSrc = options.clusterSmallImgSrc;              
+                    }
+                    else if(childCount >= 10 && childCount < 100){ // medimum
+                        imageSrc = options.clusterMediumImgSrc;
+                    }
+                    else{ // larger
+                        imageSrc = options.clusterLargeImgSrc;
+                    } 
+                    promiseArray.push(new Promise(resolve => {
+                        self._loadClusterMarker(parent._leaflet_id, parentLeaftletPos, imageSrc, childCount, resolve);
+                    })); 
+                  visibleClusterMarkers[parent._leaflet_id] = parent;
+                }
+              });
+              Promise.all(promiseArray).then(() => {
+                resolve();
+            });
+        },
+
+        _loadClusterMarker: function(parentLeaftletId, parentLeaftletPos, imageSrc, childCount, resolve){
+            let self = this;
+            let image = new Image();
+            image.crossOrigin = 'Anonymous';
+            image.onload = function () {
+                self.markers[parentLeaftletId] = { 
+                    img : image,
+                    text: childCount,
+                    x: parentLeaftletPos.x, 
+                    y: parentLeaftletPos.y
+                }; 
+                resolve();
+            };
+            image.onerror = function() {
+                resolve();
+            };
+            image.src = imageSrc;
         },
 
         _changeScale: function (scale) {
@@ -394,7 +440,7 @@
             self.canvas.height = dimensions.y;
             self.ctx = self.canvas.getContext('2d');
 
-            this._changeScale(document.getElementById('scale').value);
+            this._changeScale(1);
 
             let promise = new Promise(function (resolve, reject) {
                 self._getLayers(resolve);
@@ -412,9 +458,26 @@
                         self._drawPath(value);
                     }
                     for (const [key, value] of Object.entries(self.markers)) {
-                        if (!(value instanceof HTMLImageElement) && !value.img) {
+                        if (!(value instanceof HTMLImageElement) && !value.img && !value.tooltip && !value.text && value.html) {                   
                             self._drawText(value, value.x, value.y);
-                        } else {
+                        }else if(!(value instanceof HTMLImageElement) && value.img && value.tooltip && !value.text) { // node with image and tooltip
+                            self.ctx.drawImage(value.img, value.x, value.y);
+                            let oldColour = self.ctx.fillStyle;
+                            self.ctx.font = "bold 14px arial";
+                            self.ctx.fillStyle = 'black';
+                            self.ctx.fillText(value.tooltip, value.x, value.y+22)
+                            self.ctx.fillStyle = oldColour;  
+        
+                        }else if(!(value instanceof HTMLImageElement) && value.img && value.text && !value.tooltip){ // cluster node
+                            self.ctx.drawImage(value.img, value.x -20, value.y - 20);
+                            let oldColour = self.ctx.fillStyle;
+                            self.ctx.font = "15px arial";
+                            self.ctx.fillStyle = 'black';
+                            const xAxis = value.text < 10 ? value.x-4 : value.x-8;
+                            self.ctx.fillText(value.text, xAxis, value.y+5)
+                            self.ctx.fillStyle = oldColour;   
+                              
+                        } else { // node with only image
                             self.ctx.drawImage(value.img, value.x, value.y);
                         }
                     }
@@ -430,7 +493,6 @@
                     link.href = URL.createObjectURL(blob);
                     link.click();
                 });
-                self._containerParams.classList.remove('print-disabled');
                 self._loader.style.display = 'none';
             });
         }
