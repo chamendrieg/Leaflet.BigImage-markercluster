@@ -13,9 +13,6 @@ A [leaflet](http://www.leafletjs.com) plugin that allows users to download an im
 ## Changelog
 **14.12.2021**
 - Add support multilayer export
-  
-## Demo
-[Leaflet.BigImage](https://pasichnykvasyl.github.io/Leaflet.BigImage/)
 
 ## Downloads
 **NPM**
@@ -32,10 +29,14 @@ A [leaflet](http://www.leafletjs.com) plugin that allows users to download an im
   <script src="dist/Leaflet.BigImage.min.js"></script>
 ```
 
-**Step 2.** Add the following line of code to your map script
+**Step 2.** Add the following line of code to your map script. It is recommended if the height and width of the the png files to have 40px
 
 ``` js
-	L.control.bigImage({position: 'topright'}).addTo(mymap);
+	L.control.bigImage({
+        position: 'topright', 
+        clusterLargeImgSrc: '/content/large.png',
+        clusterSmallImgSrc: '/content/small.png',
+        clusterMediumImgSrc: '/content/medium.png'}).addTo(mymap);
 ```
 
 **Step 3.**
@@ -50,3 +51,6 @@ You can pass a number of options to the plugin to control various settings.
 | minScale            | Int          | 1            | Min image scale |
 | inputTitle          | String       | 'Choose scale:'  | Title before scale input |
 | downloadTitle       | String       | 'Download'  | Text on the download button |
+| clusterLargeImgSrc  | String       | ''          | path to icon to show large clusters
+| clusterSmallImgSrc  | String       | ''          | path to icon to show small clusters
+| clusterMediumImgSrc | String       | ''          | path to icon to show medium clusters
