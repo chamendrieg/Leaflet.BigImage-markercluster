@@ -50,7 +50,7 @@
             return this._createControl(label, title, classes, this._click, this);
         },
 
-        _click: function (e) {
+        _click: function () {
             this._loader.style.display = 'block';
             this._print();
         },
@@ -422,7 +422,7 @@
             }
         },
 
-        _print: function () {
+        _createCanvas: function (canvas_resolve){
             let self = this;
 
             self.tilesImgs = {};
@@ -487,6 +487,18 @@
                     resolve();
                 }));
             }).then(() => {
+                canvas_resolve(self.canvas);
+                
+            });
+        },
+
+        _print: function () {
+            let self = this;
+           
+            let promise = new Promise(function (resolve, reject) {
+                self. _createCanvas(resolve);
+            });
+            promise.then(() => {
                 self.canvas.toBlob(function (blob) {
                     let link = document.createElement('a');
                     link.download = "mapExport.png";
@@ -495,10 +507,20 @@
                 });
                 self._loader.style.display = 'none';
             });
+        },
+
+        fetchImage: function(){
+            let self = this;
+            let promise = new Promise(function (resolve_canvas, reject) {
+                self. _createCanvas(resolve_canvas);
+            });
+            self._loader.style.display = 'none';
+            return promise;
         }
     });
 
     L.control.bigImage = function (options) {
         return new L.Control.BigImage(options);
     };
+
 }, window));
