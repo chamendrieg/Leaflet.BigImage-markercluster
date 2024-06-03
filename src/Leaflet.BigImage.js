@@ -465,7 +465,7 @@
                             let oldColour = self.ctx.fillStyle;
                             self.ctx.font = "bold 14px arial";
                             self.ctx.fillStyle = 'black';
-                            self.ctx.fillText(value.tooltip, value.x, value.y+22)
+                            self.ctx.fillText(value.tooltip, value.x, value.y+50)
                             self.ctx.fillStyle = oldColour;  
         
                         }else if(!(value instanceof HTMLImageElement) && value.img && value.text && !value.tooltip){ // cluster node
