@@ -293,8 +293,9 @@
             layer.eachLayer(function (marker) {
                 parent = layer.getVisibleParent(marker);
                 if (parent && (typeof visibleClusterMarkers[parent._leaflet_id] == 'undefined')
-                        && parent.options.icon.options.iconUrl == undefined) {     
-                    var parentLeaftletPos = parent._icon._leaflet_pos;
+                        && parent.options.icon.options.iconUrl == undefined) {                 
+                    let pixelPoint = self._map.project(parent._latlng);
+                    var parentLeaftletPos = pixelPoint.subtract(new L.Point(self.bounds.min.x, self.bounds.min.y));
                     var childCount = parent._childCount;
                     var imageSrc = '';
                     if(childCount < 10){ // small
